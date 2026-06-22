@@ -1,0 +1,44 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "apps", "apps", "{AC132A5F-BCAC-4225-9693-3FEC21C9F957}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows", "windows", "{BD3525F5-D758-4E8C-8909-1451E96C540D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CableSpeaker.Core", "apps\windows\CableSpeaker.Core\CableSpeaker.Core.csproj", "{C9538A6F-E957-4C10-8526-AAED0A30DF9C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CableSpeaker.Core.Tests", "apps\windows\CableSpeaker.Core.Tests\CableSpeaker.Core.Tests.csproj", "{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CableSpeaker.Windows", "apps\windows\CableSpeaker.Windows\CableSpeaker.Windows.csproj", "{C661E553-251B-4E5E-98A9-5654075A5780}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C9538A6F-E957-4C10-8526-AAED0A30DF9C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9538A6F-E957-4C10-8526-AAED0A30DF9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9538A6F-E957-4C10-8526-AAED0A30DF9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9538A6F-E957-4C10-8526-AAED0A30DF9C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C661E553-251B-4E5E-98A9-5654075A5780}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C661E553-251B-4E5E-98A9-5654075A5780}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C661E553-251B-4E5E-98A9-5654075A5780}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C661E553-251B-4E5E-98A9-5654075A5780}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BD3525F5-D758-4E8C-8909-1451E96C540D} = {AC132A5F-BCAC-4225-9693-3FEC21C9F957}
+		{C9538A6F-E957-4C10-8526-AAED0A30DF9C} = {BD3525F5-D758-4E8C-8909-1451E96C540D}
+		{45067EB3-7A16-4ABE-A2A1-AD81D1B8DE7E} = {BD3525F5-D758-4E8C-8909-1451E96C540D}
+		{C661E553-251B-4E5E-98A9-5654075A5780} = {BD3525F5-D758-4E8C-8909-1451E96C540D}
+	EndGlobalSection
+EndGlobal

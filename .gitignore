@@ -1,0 +1,25 @@
+# Build outputs
+bin/
+obj/
+out/
+dist/
+artifacts/
+build/
+.gradle/
+
+# Android
+*.apk
+*.aab
+local.properties
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Tool downloads
+tools/platform-tools/
+tools/downloads/
+

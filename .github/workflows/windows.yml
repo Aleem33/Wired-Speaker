@@ -1,0 +1,53 @@
+name: Windows
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows sender
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test core
+        run: dotnet test apps/windows/CableSpeaker.Core.Tests/CableSpeaker.Core.Tests.csproj --configuration Release --logger trx
+
+      - name: Publish Windows app
+        run: >
+          dotnet publish apps/windows/CableSpeaker.Windows/CableSpeaker.Windows.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          --output artifacts/windows
+
+      - name: Copy helper scripts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/windows/tools | Out-Null
+          Copy-Item tools/*.ps1 artifacts/windows/tools/
+          Copy-Item tools/*.psm1 artifacts/windows/tools/
+
+      - name: Package Windows zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path artifacts/windows/* -DestinationPath artifacts/CableSpeaker-Windows.zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CableSpeaker-Windows
+          path: artifacts/CableSpeaker-Windows.zip
+

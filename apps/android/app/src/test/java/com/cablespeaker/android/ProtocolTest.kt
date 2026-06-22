@@ -1,0 +1,62 @@
+package com.cablespeaker.android
+
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+
+class ProtocolTest {
+    @Test
+    fun handshakeRoundTrips() {
+        val bytes = ByteBuffer.allocate(Protocol.HANDSHAKE_BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .put(Protocol.MAGIC.toByteArray())
+            .putInt(Protocol.SAMPLE_RATE)
+            .putInt(Protocol.CHANNELS)
+            .putInt(Protocol.BITS_PER_SAMPLE)
+            .putInt(Protocol.FRAME_DURATION_MS)
+            .array()
+
+        val handshake = FrameReader(ByteArrayInputStream(bytes)).readHandshake()
+
+        assertEquals(Protocol.SAMPLE_RATE, handshake.sampleRate)
+        assertEquals(Protocol.CHANNELS, handshake.channels)
+        assertEquals(Protocol.BITS_PER_SAMPLE, handshake.bitsPerSample)
+        assertEquals(Protocol.FRAME_DURATION_MS, handshake.frameDurationMs)
+        handshake.validate()
+    }
+
+    @Test
+    fun frameRoundTrips() {
+        val payload = ByteArray(Protocol.FRAME_PAYLOAD_BYTES) { (it % 251).toByte() }
+        val bytes = ByteBuffer.allocate(Protocol.FRAME_HEADER_BYTES + payload.size)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(payload.size)
+            .putLong(123456789L)
+            .put(payload)
+            .array()
+
+        val frame = FrameReader(ByteArrayInputStream(bytes)).readFrame()
+
+        assertEquals(123456789L, frame.hostTimestampMicros)
+        assertContentEquals(payload, frame.payload)
+    }
+
+    @Test
+    fun rejectsOversizedFrame() {
+        val bytes = ByteBuffer.allocate(Protocol.FRAME_HEADER_BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(Protocol.MAX_FRAME_PAYLOAD_BYTES + 1)
+            .putLong(0)
+            .array()
+
+        assertFailsWith<IOException> {
+            FrameReader(ByteArrayInputStream(bytes)).readFrame()
+        }
+    }
+}
+
