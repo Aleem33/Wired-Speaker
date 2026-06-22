@@ -2,8 +2,8 @@ package com.cablespeaker.android
 
 class PcmJitterBuffer(targetBufferMs: Int) {
     private val frames = ArrayDeque<ByteArray>()
-    private val targetBytes = Protocol.bytesForMs(targetBufferMs)
-    private val maxBytes = Protocol.bytesForMs((targetBufferMs * 3).coerceAtLeast(targetBufferMs + 120))
+    private var targetBytes = Protocol.bytesForMs(targetBufferMs)
+    private var maxBytes = Protocol.bytesForMs((targetBufferMs * 4).coerceAtLeast(targetBufferMs + 180))
     private var totalBytes = 0
 
     var droppedFrames: Long = 0
@@ -19,6 +19,13 @@ class PcmJitterBuffer(targetBufferMs: Int) {
         @Synchronized get() = totalBytes >= targetBytes
 
     @Synchronized
+    fun setTargetBufferMs(targetBufferMs: Int) {
+        targetBytes = Protocol.bytesForMs(targetBufferMs)
+        maxBytes = Protocol.bytesForMs((targetBufferMs * 4).coerceAtLeast(targetBufferMs + 180))
+        trimToMax()
+    }
+
+    @Synchronized
     fun offer(frame: ByteArray) {
         if (frame.isEmpty()) {
             return
@@ -27,11 +34,7 @@ class PcmJitterBuffer(targetBufferMs: Int) {
         frames.addLast(frame.copyOf())
         totalBytes += frame.size
 
-        while (totalBytes > maxBytes && frames.isNotEmpty()) {
-            val dropped = frames.removeFirst()
-            totalBytes -= dropped.size
-            droppedFrames++
-        }
+        trimToMax()
     }
 
     @Synchronized
@@ -51,5 +54,13 @@ class PcmJitterBuffer(targetBufferMs: Int) {
         frames.clear()
         totalBytes = 0
     }
-}
 
+    @Synchronized
+    private fun trimToMax() {
+        while (totalBytes > maxBytes && frames.isNotEmpty()) {
+            val dropped = frames.removeFirst()
+            totalBytes -= dropped.size
+            droppedFrames++
+        }
+    }
+}

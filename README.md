@@ -1,6 +1,6 @@
 # CableSpeaker
 
-CableSpeaker lets a Windows laptop stream its system audio to an Android phone over a USB cable. It is built for the case where the laptop speakers are unavailable, but Windows audio still plays through the normal output pipeline.
+CableSpeaker lets a Windows laptop stream its system audio to an Android phone over a USB cable. It can also stream the phone microphone back to Windows through VB-CABLE, so apps like Discord or Zoom can select it as a microphone.
 
 The v1 bridge uses ADB USB tunneling:
 
@@ -8,6 +8,7 @@ The v1 bridge uses ADB USB tunneling:
 2. The Windows app listens only on `127.0.0.1:38271`.
 3. `adb reverse tcp:38271 tcp:38271` exposes that local port to the phone over USB.
 4. The Android app connects to `127.0.0.1:38271` and plays streamed PCM through `AudioTrack`.
+5. For phone mic mode, the Windows app also listens on `127.0.0.1:38272`, and the phone sends mono PCM mic frames over a second USB tunnel.
 
 Audio stays local between the laptop and phone. GitHub Actions are included so the Windows app and Android APK can be built in the cloud even if this laptop does not have the full SDKs installed.
 
@@ -38,12 +39,24 @@ tools\Install-AndroidApk.ps1 -ApkPath .\CableSpeaker-debug.apk
 
 1. Start the Windows app.
 2. Press `Check Phone`.
-3. Press `Setup USB Tunnel`.
-4. Press `Start`.
+3. Press `Setup USB Tunnels`.
+4. Press `Start Speaker`.
 5. Open CableSpeaker on the phone and press `Connect`.
 6. Play audio on Windows.
 
-If audio is delayed, choose a lower latency mode in the phone app. If it clicks or drops, choose a higher latency mode.
+Stable latency is the default because it avoids repeated buffering and broken audio.
+
+## Use phone mic as PC microphone
+
+1. Install VB-CABLE from the official VB-Audio page: <https://vb-audio.com/Cable/>.
+2. Restart Windows if the driver installer asks.
+3. Run `tools\Check-VBCable.ps1` and confirm a VB-CABLE device is detected.
+4. In CableSpeaker on Windows, choose `CABLE Input` in the `Phone Mic To PC` panel.
+5. Press `Start Mic Receiver`.
+6. On the phone, press `Mic Start`.
+7. In Discord, Zoom, Windows Sound Settings, or another app, choose `CABLE Output` as the microphone.
+
+If VB-CABLE is not installed, CableSpeaker can receive phone mic audio, but Windows apps will not see it as a selectable microphone.
 
 ## Cloud builds
 

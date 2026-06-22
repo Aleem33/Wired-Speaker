@@ -47,6 +47,22 @@ class ProtocolTest {
     }
 
     @Test
+    fun micFrameWriterWritesHandshakeAndFrame() {
+        val output = java.io.ByteArrayOutputStream()
+        val writer = FrameWriter(output)
+        val payload = ByteArray(Protocol.MIC_FRAME_PAYLOAD_BYTES) { (it % 127).toByte() }
+
+        writer.writeMicHandshake()
+        writer.writeFrame(payload, 987654321L)
+
+        val bytes = output.toByteArray()
+        assertEquals(Protocol.MIC_MAGIC, bytes.copyOfRange(0, 4).decodeToString())
+        val frame = FrameReader(java.io.ByteArrayInputStream(bytes.copyOfRange(Protocol.HANDSHAKE_BYTES, bytes.size))).readFrame()
+        assertEquals(987654321L, frame.hostTimestampMicros)
+        assertArrayEquals(payload, frame.payload)
+    }
+
+    @Test
     fun rejectsOversizedFrame() {
         val bytes = ByteBuffer.allocate(Protocol.FRAME_HEADER_BYTES)
             .order(ByteOrder.LITTLE_ENDIAN)

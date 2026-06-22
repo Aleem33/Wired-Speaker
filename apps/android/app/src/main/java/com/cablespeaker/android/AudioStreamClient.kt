@@ -18,6 +18,7 @@ class AudioStreamClient(
     private val running = AtomicBoolean(false)
     private val jitterBuffer = PcmJitterBuffer(latencyMode.bufferMs)
     private val silenceFrame = ByteArray(Protocol.FRAME_PAYLOAD_BYTES)
+    private var activeBufferMs = latencyMode.bufferMs
 
     @Volatile private var socket: Socket? = null
     @Volatile private var audioTrack: AudioTrack? = null
@@ -103,6 +104,8 @@ class AudioStreamClient(
     private fun startWriter(track: AudioTrack) {
         writerThread = thread(name = "CableSpeaker-writer") {
             var primed = false
+            var lastUnderruns = 0L
+            var lastUnderrunWindowAt = System.currentTimeMillis()
             while (running.get()) {
                 if (!primed && !jitterBuffer.isPrimed) {
                     Thread.sleep(5)
@@ -111,7 +114,17 @@ class AudioStreamClient(
                 }
 
                 primed = true
-                val payload = jitterBuffer.poll() ?: silenceFrame
+                val payload = jitterBuffer.poll()
+                if (payload == null) {
+                    primed = false
+                    maybeRaiseBufferAfterUnderruns(lastUnderruns, lastUnderrunWindowAt)
+                    lastUnderruns = jitterBuffer.underruns
+                    lastUnderrunWindowAt = System.currentTimeMillis()
+                    track.write(silenceFrame, 0, silenceFrame.size, AudioTrack.WRITE_BLOCKING)
+                    publishCurrent("Rebuffering after underrun.")
+                    continue
+                }
+
                 val written = track.write(payload, 0, payload.size, AudioTrack.WRITE_BLOCKING)
                 if (written < 0) {
                     throw IOException("AudioTrack write failed with code $written")
@@ -121,13 +134,22 @@ class AudioStreamClient(
         }
     }
 
+    private fun maybeRaiseBufferAfterUnderruns(previousUnderruns: Long, windowStartMs: Long) {
+        val now = System.currentTimeMillis()
+        val recentUnderruns = jitterBuffer.underruns - previousUnderruns
+        if ((recentUnderruns >= 2 || jitterBuffer.underruns >= 2) && now - windowStartMs <= 5000 && activeBufferMs < LatencyMode.Stable.bufferMs) {
+            activeBufferMs = LatencyMode.Stable.bufferMs
+            jitterBuffer.setTargetBufferMs(activeBufferMs)
+        }
+    }
+
     private fun createAudioTrack(): AudioTrack {
         val minBuffer = AudioTrack.getMinBufferSize(
             Protocol.SAMPLE_RATE,
             AudioFormat.CHANNEL_OUT_STEREO,
             AudioFormat.ENCODING_PCM_16BIT,
         )
-        val trackBufferBytes = max(minBuffer, Protocol.bytesForMs(latencyMode.bufferMs * 2))
+        val trackBufferBytes = max(minBuffer, Protocol.bytesForMs(latencyMode.bufferMs * 3))
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -168,7 +190,7 @@ class AudioStreamClient(
                 bufferMs = jitterBuffer.bufferMs,
                 underruns = jitterBuffer.underruns,
                 droppedFrames = jitterBuffer.droppedFrames,
-                latencyMode = latencyMode.label,
+                latencyMode = if (activeBufferMs >= LatencyMode.Stable.bufferMs) LatencyMode.Stable.label else latencyMode.label,
             ),
             force = false,
         )
@@ -184,4 +206,3 @@ class AudioStreamClient(
         onState(state)
     }
 }
-

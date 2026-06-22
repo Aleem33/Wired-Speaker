@@ -8,15 +8,23 @@ namespace CableSpeaker.Windows;
 public partial class MainWindow : Window
 {
     private readonly AdbService _adbService = new();
+    private readonly AppSettings _settings;
     private CableSpeakerServer? _server;
+    private MicReceiverService? _micReceiver;
+    private DateTime _lastSpeakerLog = DateTime.MinValue;
+    private DateTime _lastMicLog = DateTime.MinValue;
+    private string _lastSpeakerMessage = "";
+    private string _lastMicMessage = "";
 
     public MainWindow()
     {
         InitializeComponent();
+        _settings = AppSettings.Load();
         AudioDeviceText.Text = AudioDeviceService.GetDefaultRenderDeviceName();
         AdbStatusText.Text = "ADB not checked yet.";
-        TunnelStatusText.Text = $"Tunnel not configured. Expected port: {ProtocolConstants.Port}.";
-        AppendLog("Ready. Connect your Android phone by USB, then check the phone.");
+        TunnelStatusText.Text = $"Tunnels not configured. Expected ports: {ProtocolConstants.SpeakerPort} and {ProtocolConstants.MicPort}.";
+        LoadMicOutputDevices();
+        AppendLog("Ready. Connect your Android phone by USB, then set up tunnels.");
     }
 
     protected override async void OnClosed(EventArgs e)
@@ -26,7 +34,28 @@ public partial class MainWindow : Window
             await _server.DisposeAsync();
         }
 
+        if (_micReceiver is not null)
+        {
+            await _micReceiver.DisposeAsync();
+        }
+
         base.OnClosed(e);
+    }
+
+    private void LoadMicOutputDevices()
+    {
+        var devices = AudioDeviceService.GetWaveOutputDevices();
+        MicOutputComboBox.ItemsSource = devices;
+        MicOutputComboBox.DisplayMemberPath = nameof(WaveOutputDeviceInfo.Name);
+        MicOutputComboBox.SelectedValuePath = nameof(WaveOutputDeviceInfo.Name);
+
+        var selected = AudioDeviceService.FindPreferredMicOutputDevice(_settings.MicOutputDeviceName);
+        MicOutputComboBox.SelectedItem = selected;
+
+        VbCableStatusText.Text = AudioDeviceService.HasVbCable()
+            ? "VB-CABLE detected. Choose CABLE Input here, then CABLE Output in your PC app."
+            : "VB-CABLE not detected. Install it from vb-audio.com/Cable for a real selectable PC microphone.";
+        MicStatsText.Text = "Mic receiver stopped.";
     }
 
     private async void StartButton_Click(object sender, RoutedEventArgs e)
@@ -43,16 +72,42 @@ public partial class MainWindow : Window
             _server = new CableSpeakerServer(source);
             _server.StateChanged += Server_StateChanged;
             await _server.StartAsync();
-
-            StartButton.IsEnabled = false;
-            StopButton.IsEnabled = true;
-            AppendLog($"Started on 127.0.0.1:{ProtocolConstants.Port}. Open the Android app and press Connect.");
+            AppendLog($"Speaker stream started on 127.0.0.1:{ProtocolConstants.SpeakerPort}. Press Connect on the phone.");
         });
     }
 
     private async void StopButton_Click(object sender, RoutedEventArgs e)
     {
         await StopServerAsync();
+    }
+
+    private async void StartMicButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiActionAsync(async () =>
+        {
+            if (_micReceiver is not null)
+            {
+                return;
+            }
+
+            if (MicOutputComboBox.SelectedItem is not WaveOutputDeviceInfo device)
+            {
+                throw new InvalidOperationException("Select a Windows output device for the phone mic first.");
+            }
+
+            _settings.MicOutputDeviceName = device.Name;
+            _settings.Save();
+
+            _micReceiver = new MicReceiverService(device.DeviceNumber);
+            _micReceiver.StateChanged += MicReceiver_StateChanged;
+            await _micReceiver.StartAsync();
+            AppendLog($"Mic receiver started on 127.0.0.1:{ProtocolConstants.MicPort}. Press Mic Start on the phone.");
+        });
+    }
+
+    private async void StopMicButton_Click(object sender, RoutedEventArgs e)
+    {
+        await StopMicReceiverAsync();
     }
 
     private async void CheckPhoneButton_Click(object sender, RoutedEventArgs e)
@@ -69,10 +124,21 @@ public partial class MainWindow : Window
     {
         await RunUiActionAsync(async () =>
         {
-            var result = await _adbService.SetupReverseTunnelAsync(ProtocolConstants.Port);
+            var result = await _adbService.SetupCableSpeakerTunnelsAsync();
             TunnelStatusText.Text = result.Summary;
             AppendLog(result.Details);
         });
+    }
+
+    private void MicOutputComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (MicOutputComboBox.SelectedItem is not WaveOutputDeviceInfo device)
+        {
+            return;
+        }
+
+        _settings.MicOutputDeviceName = device.Name;
+        _settings.Save();
     }
 
     private async Task StopServerAsync()
@@ -88,9 +154,25 @@ public partial class MainWindow : Window
             await _server.DisposeAsync();
             _server = null;
             LevelMeter.Value = 0;
-            StartButton.IsEnabled = true;
-            StopButton.IsEnabled = false;
-            AppendLog("Stopped.");
+            AppendLog("Speaker stream stopped.");
+        });
+    }
+
+    private async Task StopMicReceiverAsync()
+    {
+        await RunUiActionAsync(async () =>
+        {
+            if (_micReceiver is null)
+            {
+                return;
+            }
+
+            _micReceiver.StateChanged -= MicReceiver_StateChanged;
+            await _micReceiver.DisposeAsync();
+            _micReceiver = null;
+            MicLevelMeter.Value = 0;
+            MicStatsText.Text = "Mic receiver stopped.";
+            AppendLog("Mic receiver stopped.");
         });
     }
 
@@ -99,22 +181,41 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(() =>
         {
             LevelMeter.Value = e.State.Peak;
-            AppendLogThrottled($"{e.State.Message} Frames sent: {e.State.FramesSent}. Dropped: {e.State.FramesDropped}.");
+            AppendSpeakerLogThrottled($"{e.State.Message} Frames sent: {e.State.FramesSent}. Dropped: {e.State.FramesDropped}.");
         });
     }
 
-    private DateTime _lastThrottledLog = DateTime.MinValue;
-    private string _lastThrottledMessage = "";
-
-    private void AppendLogThrottled(string message)
+    private void MicReceiver_StateChanged(object? sender, MicReceiverStateEventArgs e)
     {
-        if (message == _lastThrottledMessage && DateTime.UtcNow - _lastThrottledLog < TimeSpan.FromSeconds(2))
+        Dispatcher.Invoke(() =>
+        {
+            MicLevelMeter.Value = e.State.Peak;
+            MicStatsText.Text = $"{e.State.Message} Frames: {e.State.FramesReceived}. Dropped: {e.State.FramesDropped}. Buffer: {e.State.BufferedMilliseconds}ms.";
+            AppendMicLogThrottled(MicStatsText.Text);
+        });
+    }
+
+    private void AppendSpeakerLogThrottled(string message)
+    {
+        if (message == _lastSpeakerMessage && DateTime.UtcNow - _lastSpeakerLog < TimeSpan.FromSeconds(2))
         {
             return;
         }
 
-        _lastThrottledLog = DateTime.UtcNow;
-        _lastThrottledMessage = message;
+        _lastSpeakerLog = DateTime.UtcNow;
+        _lastSpeakerMessage = message;
+        AppendLog(message);
+    }
+
+    private void AppendMicLogThrottled(string message)
+    {
+        if (message == _lastMicMessage && DateTime.UtcNow - _lastMicLog < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastMicLog = DateTime.UtcNow;
+        _lastMicMessage = message;
         AppendLog(message);
     }
 
@@ -133,23 +234,28 @@ public partial class MainWindow : Window
         finally
         {
             SetControlsEnabled(true);
-            StartButton.IsEnabled = _server is null;
-            StopButton.IsEnabled = _server is not null;
         }
     }
 
     private void SetControlsEnabled(bool enabled)
     {
-        StartButton.IsEnabled = enabled;
-        StopButton.IsEnabled = enabled && _server is not null;
         CheckPhoneButton.IsEnabled = enabled;
         SetupTunnelButton.IsEnabled = enabled;
+        StartButton.IsEnabled = enabled && _server is null;
+        StopButton.IsEnabled = enabled && _server is not null;
+        StartMicButton.IsEnabled = enabled && _micReceiver is null;
+        StopMicButton.IsEnabled = enabled && _micReceiver is not null;
+        MicOutputComboBox.IsEnabled = enabled && _micReceiver is null;
     }
 
     private void AppendLog(string message)
     {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
         LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
         LogTextBox.ScrollToEnd();
     }
 }
-

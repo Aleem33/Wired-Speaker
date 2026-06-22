@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [int] $Port = 38271
+    [int[]] $Ports = @(38271, 38272)
 )
 
 Set-StrictMode -Version Latest
@@ -12,12 +12,14 @@ try {
     $device = Assert-CableSpeakerPhoneReady
     Write-Host "Phone ready: $device"
 
-    $result = Invoke-CableSpeakerAdb -Arguments @('reverse', "tcp:$Port", "tcp:$Port")
-    if ($result.ExitCode -ne 0) {
-        throw $result.Output
-    }
+    foreach ($port in $Ports) {
+        $result = Invoke-CableSpeakerAdb -Arguments @('reverse', "tcp:$port", "tcp:$port")
+        if ($result.ExitCode -ne 0) {
+            throw $result.Output
+        }
 
-    Write-Host "USB tunnel ready: phone tcp:$Port -> laptop tcp:$Port"
+        Write-Host "USB tunnel ready: phone tcp:$port -> laptop tcp:$port"
+    }
 
     $reverseList = Invoke-CableSpeakerAdb -Arguments @('reverse', '--list')
     if ($reverseList.ExitCode -eq 0 -and $reverseList.Output.Trim()) {

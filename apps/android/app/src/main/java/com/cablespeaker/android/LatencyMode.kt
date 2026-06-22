@@ -11,4 +11,3 @@ enum class LatencyMode(val label: String, val bufferMs: Int) {
         }
     }
 }
-

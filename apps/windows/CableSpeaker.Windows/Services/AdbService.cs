@@ -71,6 +71,41 @@ public sealed class AdbService
             $"adb {args}{Environment.NewLine}{result.Output.Trim()}");
     }
 
+    public async Task<AdbCommandResult> SetupCableSpeakerTunnelsAsync()
+    {
+        var adb = FindAdb();
+        if (adb is null)
+        {
+            return new AdbCommandResult(
+                false,
+                "ADB not found.",
+                "ADB was not found. Run tools\\Get-PlatformTools.ps1, then try again.");
+        }
+
+        var devices = await GetDeviceStatusAsync();
+        if (!devices.Success)
+        {
+            return devices;
+        }
+
+        var speakerArgs = $"reverse tcp:{ProtocolConstants.SpeakerPort} tcp:{ProtocolConstants.SpeakerPort}";
+        var micArgs = $"reverse tcp:{ProtocolConstants.MicPort} tcp:{ProtocolConstants.MicPort}";
+        var speaker = await RunAdbAsync(adb, speakerArgs);
+        var mic = await RunAdbAsync(adb, micArgs);
+        var details = $"adb {speakerArgs}{Environment.NewLine}{speaker.Output.Trim()}{Environment.NewLine}" +
+                      $"adb {micArgs}{Environment.NewLine}{mic.Output.Trim()}";
+
+        if (speaker.ExitCode != 0 || mic.ExitCode != 0)
+        {
+            return new AdbCommandResult(false, "USB tunnel setup failed.", details);
+        }
+
+        return new AdbCommandResult(
+            true,
+            $"USB tunnels ready on tcp:{ProtocolConstants.SpeakerPort} and tcp:{ProtocolConstants.MicPort}.",
+            details);
+    }
+
     private static string? FindAdb()
     {
         var baseDir = AppContext.BaseDirectory;

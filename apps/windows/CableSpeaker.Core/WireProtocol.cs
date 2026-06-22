@@ -7,24 +7,36 @@ namespace CableSpeaker.Core;
 public static class WireProtocol
 {
     public static byte[] CreateHandshake()
+        => CreateHandshake(ProtocolConstants.Magic, ProtocolConstants.SampleRate, ProtocolConstants.Channels);
+
+    public static byte[] CreateMicHandshake()
+        => CreateHandshake(ProtocolConstants.MicMagic, ProtocolConstants.SampleRate, ProtocolConstants.MicChannels);
+
+    private static byte[] CreateHandshake(byte[] magic, int sampleRate, int channels)
     {
         var buffer = new byte[ProtocolConstants.HandshakeBytes];
-        ProtocolConstants.Magic.CopyTo(buffer, 0);
-        BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(4, 4), ProtocolConstants.SampleRate);
-        BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(8, 4), ProtocolConstants.Channels);
+        magic.CopyTo(buffer, 0);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(4, 4), sampleRate);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(8, 4), channels);
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(12, 4), ProtocolConstants.BitsPerSample);
         BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(16, 4), ProtocolConstants.FrameDurationMs);
         return buffer;
     }
 
     public static Handshake ParseHandshake(ReadOnlySpan<byte> buffer)
+        => ParseHandshake(buffer, ProtocolConstants.Magic);
+
+    public static Handshake ParseMicHandshake(ReadOnlySpan<byte> buffer)
+        => ParseHandshake(buffer, ProtocolConstants.MicMagic);
+
+    private static Handshake ParseHandshake(ReadOnlySpan<byte> buffer, ReadOnlySpan<byte> expectedMagic)
     {
         if (buffer.Length < ProtocolConstants.HandshakeBytes)
         {
             throw new InvalidDataException("Handshake is incomplete.");
         }
 
-        if (!buffer[..4].SequenceEqual(ProtocolConstants.Magic))
+        if (!buffer[..4].SequenceEqual(expectedMagic))
         {
             var magic = Encoding.ASCII.GetString(buffer[..4]);
             throw new InvalidDataException($"Unexpected protocol magic '{magic}'.");
@@ -43,11 +55,24 @@ public static class WireProtocol
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public static async ValueTask WriteMicHandshakeAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        await stream.WriteAsync(CreateMicHandshake(), cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public static async ValueTask<Handshake> ReadHandshakeAsync(Stream stream, CancellationToken cancellationToken)
     {
         var buffer = new byte[ProtocolConstants.HandshakeBytes];
         await ReadExactlyAsync(stream, buffer, cancellationToken).ConfigureAwait(false);
         return ParseHandshake(buffer);
+    }
+
+    public static async ValueTask<Handshake> ReadMicHandshakeAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[ProtocolConstants.HandshakeBytes];
+        await ReadExactlyAsync(stream, buffer, cancellationToken).ConfigureAwait(false);
+        return ParseMicHandshake(buffer);
     }
 
     public static async ValueTask WriteFrameAsync(Stream stream, AudioFrame frame, CancellationToken cancellationToken)
@@ -66,12 +91,15 @@ public static class WireProtocol
     }
 
     public static async ValueTask<AudioFrame> ReadFrameAsync(Stream stream, CancellationToken cancellationToken)
+        => await ReadFrameAsync(stream, ProtocolConstants.MaxFramePayloadBytes, cancellationToken).ConfigureAwait(false);
+
+    public static async ValueTask<AudioFrame> ReadFrameAsync(Stream stream, int maxFramePayloadBytes, CancellationToken cancellationToken)
     {
         var header = new byte[ProtocolConstants.FrameHeaderBytes];
         await ReadExactlyAsync(stream, header, cancellationToken).ConfigureAwait(false);
 
         var payloadLength = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0, 4));
-        if (payloadLength is <= 0 or > ProtocolConstants.MaxFramePayloadBytes)
+        if (payloadLength <= 0 || payloadLength > maxFramePayloadBytes)
         {
             throw new InvalidDataException($"Invalid frame payload length {payloadLength}.");
         }
@@ -104,4 +132,3 @@ public static class WireProtocol
         client.SendBufferSize = ProtocolConstants.FramePayloadBytes * 16;
     }
 }
-

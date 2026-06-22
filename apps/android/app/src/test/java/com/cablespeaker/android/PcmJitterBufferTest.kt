@@ -44,11 +44,22 @@ class PcmJitterBufferTest {
     @Test
     fun dropsOldFramesWhenTooFull() {
         val buffer = PcmJitterBuffer(20)
-        repeat(10) {
+        repeat(12) {
             buffer.offer(ByteArray(Protocol.FRAME_PAYLOAD_BYTES) { it.toByte() })
         }
 
         assertTrue(buffer.droppedFrames > 0)
-        assertTrue(buffer.bufferMs <= 140)
+        assertTrue(buffer.bufferMs <= 200)
+    }
+
+    @Test
+    fun canRaiseTargetBufferAfterUnderrun() {
+        val buffer = PcmJitterBuffer(40)
+        buffer.offer(ByteArray(Protocol.FRAME_PAYLOAD_BYTES))
+        buffer.offer(ByteArray(Protocol.FRAME_PAYLOAD_BYTES))
+        assertTrue(buffer.isPrimed)
+
+        buffer.setTargetBufferMs(180)
+        assertFalse(buffer.isPrimed)
     }
 }
