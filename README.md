@@ -52,4 +52,4 @@ Push this folder to GitHub. The workflows will upload:
 - `CableSpeaker-Windows.zip`
 - `CableSpeaker-Android-Debug-Apk`
 
-The Android workflow follows the AGP 9.2 compatibility table: Gradle 9.4.1, JDK 17, compile/target SDK 37, build-tools 36.0.0, and min SDK 26.
+The Android workflow follows the stable SDK packages available on GitHub Actions: Gradle 9.4.1, JDK 17, compile/target SDK 36, build-tools 36.0.0, and min SDK 26.
