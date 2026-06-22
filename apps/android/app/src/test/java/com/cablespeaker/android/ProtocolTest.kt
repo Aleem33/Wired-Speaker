@@ -4,10 +4,10 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Test
 
 class ProtocolTest {
     @Test
@@ -43,7 +43,7 @@ class ProtocolTest {
         val frame = FrameReader(ByteArrayInputStream(bytes)).readFrame()
 
         assertEquals(123456789L, frame.hostTimestampMicros)
-        assertContentEquals(payload, frame.payload)
+        assertArrayEquals(payload, frame.payload)
     }
 
     @Test
@@ -54,9 +54,8 @@ class ProtocolTest {
             .putLong(0)
             .array()
 
-        assertFailsWith<IOException> {
+        assertThrows(IOException::class.java) {
             FrameReader(ByteArrayInputStream(bytes)).readFrame()
         }
     }
 }
-

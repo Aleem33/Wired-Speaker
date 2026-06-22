@@ -1,10 +1,10 @@
 package com.cablespeaker.android
 
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class PcmJitterBufferTest {
     @Test
@@ -29,8 +29,8 @@ class PcmJitterBufferTest {
         buffer.offer(first)
         buffer.offer(second)
 
-        assertContentEquals(first, buffer.poll())
-        assertContentEquals(second, buffer.poll())
+        assertArrayEquals(first, buffer.poll())
+        assertArrayEquals(second, buffer.poll())
     }
 
     @Test
@@ -52,4 +52,3 @@ class PcmJitterBufferTest {
         assertTrue(buffer.bufferMs <= 140)
     }
 }
-

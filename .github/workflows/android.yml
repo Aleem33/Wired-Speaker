@@ -26,17 +26,12 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 9.4.1
-
       - name: Test and assemble APK
         working-directory: apps/android
         shell: bash
         run: |
           set +e
-          gradle --no-daemon testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee android-build.log
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee android-build.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             tail -n 80 android-build.log > android-build-tail.log
