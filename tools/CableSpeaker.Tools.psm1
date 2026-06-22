@@ -70,12 +70,12 @@ function Assert-CableSpeakerPhoneReady {
         throw "No Android phone was detected. Connect the phone by USB and enable USB debugging."
     }
 
-    if ($result.ExitCode -ne 0) {
-        throw $result.Output
-    }
-
     $authorized = $deviceLines | Where-Object { $_ -match "`tdevice$" } | Select-Object -First 1
     if (-not $authorized) {
+        if ($result.ExitCode -ne 0) {
+            throw $result.Output
+        }
+
         throw "Phone was detected but is not authorized. Unlock the phone and accept the USB debugging prompt.`n$result.Output"
     }
 
