@@ -33,7 +33,42 @@ jobs:
 
       - name: Test and assemble APK
         working-directory: apps/android
-        run: gradle --no-daemon testDebugUnitTest assembleDebug
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee android-build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            tail -n 80 android-build.log > android-build-tail.log
+            {
+              echo 'ANDROID_BUILD_FAILED<<EOF'
+              cat android-build-tail.log
+              echo 'EOF'
+            } >> "$GITHUB_ENV"
+            exit "$status"
+          fi
+
+      - name: Report Android failure log
+        if: failure()
+        working-directory: apps/android
+        shell: bash
+        run: |
+          if [ -f android-build-tail.log ]; then
+            {
+              echo '::group::Android build failure tail'
+              cat android-build-tail.log
+              echo '::endgroup::'
+            }
+            message=$(tail -n 20 android-build-tail.log | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error file=apps/android/app/build.gradle.kts,line=1::${message}"
+          fi
+
+      - name: Upload Android failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-Build-Failure-Log
+          path: apps/android/android-build*.log
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
