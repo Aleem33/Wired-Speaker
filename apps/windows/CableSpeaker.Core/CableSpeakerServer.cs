@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
@@ -15,6 +16,8 @@ public sealed class CableSpeakerServer : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private TcpListener? _listener;
     private Task? _acceptLoop;
+    private Task? _silenceLoop;
+    private long _lastSourceFrameTicks;
     private long _framesSent;
     private long _framesDropped;
     private float _peak;
@@ -66,7 +69,9 @@ public sealed class CableSpeakerServer : IAsyncDisposable
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _listener = new TcpListener(_address, _requestedPort);
         _listener.Start();
+        _lastSourceFrameTicks = Stopwatch.GetTimestamp();
         _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token), CancellationToken.None);
+        _silenceLoop = Task.Run(() => SilenceLoopAsync(_cts.Token), CancellationToken.None);
         await _source.StartAsync(_cts.Token).ConfigureAwait(false);
         PublishState("Waiting for Android phone connection.");
     }
@@ -98,10 +103,22 @@ public sealed class CableSpeakerServer : IAsyncDisposable
             }
         }
 
+        if (_silenceLoop is not null)
+        {
+            try
+            {
+                await _silenceLoop.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
         await _source.StopAsync().ConfigureAwait(false);
         _cts.Dispose();
         _cts = null;
         _acceptLoop = null;
+        _silenceLoop = null;
         _listener = null;
 
         lock (_stateLock)
@@ -165,6 +182,7 @@ public sealed class CableSpeakerServer : IAsyncDisposable
 
     private void OnFrameReady(object? sender, AudioFrameEventArgs e)
     {
+        Interlocked.Exchange(ref _lastSourceFrameTicks, Stopwatch.GetTimestamp());
         lock (_stateLock)
         {
             _peak = e.Frame.Peak;
@@ -176,6 +194,34 @@ public sealed class CableSpeakerServer : IAsyncDisposable
         }
 
         PublishState(_hasClient ? "Streaming audio to Android phone." : "Waiting for Android phone connection.");
+    }
+
+    private async Task SilenceLoopAsync(CancellationToken cancellationToken)
+    {
+        var silencePayload = new byte[ProtocolConstants.FramePayloadBytes];
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(ProtocolConstants.FrameDurationMs));
+
+        while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!_hasClient)
+            {
+                continue;
+            }
+
+            var elapsed = Stopwatch.GetElapsedTime(Interlocked.Read(ref _lastSourceFrameTicks));
+            if (elapsed < TimeSpan.FromMilliseconds(ProtocolConstants.FrameDurationMs * 2))
+            {
+                continue;
+            }
+
+            var frame = new AudioFrame(silencePayload.ToArray(), Clock.UnixTimestampMicros(), Peak: 0);
+            if (!_frames.Writer.TryWrite(frame))
+            {
+                Interlocked.Increment(ref _framesDropped);
+            }
+
+            PublishState("Streaming silence until Windows audio resumes.");
+        }
     }
 
     private void PublishState(string message)
@@ -195,4 +241,3 @@ public sealed class CableSpeakerServer : IAsyncDisposable
         StateChanged?.Invoke(this, new ServerStateEventArgs(state));
     }
 }
-

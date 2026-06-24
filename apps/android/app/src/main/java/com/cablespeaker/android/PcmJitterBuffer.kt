@@ -3,7 +3,7 @@ package com.cablespeaker.android
 class PcmJitterBuffer(targetBufferMs: Int) {
     private val frames = ArrayDeque<ByteArray>()
     private var targetBytes = Protocol.bytesForMs(targetBufferMs)
-    private var maxBytes = Protocol.bytesForMs((targetBufferMs * 4).coerceAtLeast(targetBufferMs + 180))
+    private var maxBytes = Protocol.bytesForMs((targetBufferMs * 2).coerceAtLeast(targetBufferMs + 120))
     private var totalBytes = 0
 
     var droppedFrames: Long = 0
@@ -21,7 +21,7 @@ class PcmJitterBuffer(targetBufferMs: Int) {
     @Synchronized
     fun setTargetBufferMs(targetBufferMs: Int) {
         targetBytes = Protocol.bytesForMs(targetBufferMs)
-        maxBytes = Protocol.bytesForMs((targetBufferMs * 4).coerceAtLeast(targetBufferMs + 180))
+        maxBytes = Protocol.bytesForMs((targetBufferMs * 2).coerceAtLeast(targetBufferMs + 120))
         trimToMax()
     }
 
